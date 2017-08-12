@@ -9,16 +9,16 @@ import (
         "log"
         elastic "gopkg.in/olivere/elastic.v3"
         "github.com/pborman/uuid"
+        "context"
+        cloud.google.com/go/bigtable
 )
 
 const (
       INDEX = "around"
       TYPE = "post"
       DISTANCE = "200km"
-      // Needs to update
-      //PROJECT_ID = "around-xxx"
-      //BT_INSTANCE = "around-post"
-      // Needs to update this URL if you deploy it to cloud.
+	PROJECT_ID = "diesel-boulder-176022"
+	BT_INSTANCE = "around-post"
       ES_URL = "http://54.187.56.189:9200"
 )
 
@@ -67,6 +67,31 @@ func handlerPost(w http.ResponseWriter, r *http.Request) {
         }
 
         fmt.Printf("Post is saved to Index: %s\n", p.Message)
+//
+        ctx := context.Background()
+        // you must update project name here
+        bt_client, err := bigtable.NewClient(ctx, PROJECT_ID, BT_INSTANCE)
+        if err != nil {
+                panic(err)
+                return
+        }
+
+         tbl := bt_client.Open("post")
+      mut := bigtable.NewMutation()
+      t := bigtable.Now()
+
+      mut.Set("post", "user", t, []byte(p.User))
+      mut.Set("post", "message", t, []byte(p.Message))
+      mut.Set("location", "lat", t, []byte(strconv.FormatFloat(p.Location.Lat, 'f', -1, 64)))
+      mut.Set("location", "lon", t, []byte(strconv.FormatFloat(p.Location.Lon, 'f', -1, 64)))
+
+      err = tbl.Apply(ctx, id, mut)
+      if err != nil {
+             panic(err)
+             return
+      }
+      fmt.Printf("Post is saved to BigTable: %s\n", p.Message)
+
 
 }
 
