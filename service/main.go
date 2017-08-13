@@ -7,18 +7,18 @@ import (
         "strconv"
         "reflect"
         "log"
+        "context"
         elastic "gopkg.in/olivere/elastic.v3"
         "github.com/pborman/uuid"
-        "context"
-        cloud.google.com/go/bigtable
+        "cloud.google.com/go/bigtable"
 )
 
 const (
       INDEX = "around"
       TYPE = "post"
       DISTANCE = "200km"
-	PROJECT_ID = "diesel-boulder-176022"
-	BT_INSTANCE = "around-post"
+      PROJECT_ID = "diesel-boulder-176022"
+      BT_INSTANCE = "around-post"
       ES_URL = "http://54.187.56.189:9200"
 )
 
@@ -53,7 +53,6 @@ func handlerPost(w http.ResponseWriter, r *http.Request) {
 
         id := uuid.New()
 
-        // Save it to index
         _, err = es_client.Index().
                 Index(INDEX).
                 Type(TYPE).
@@ -65,9 +64,8 @@ func handlerPost(w http.ResponseWriter, r *http.Request) {
                 panic(err)
                 return
         }
-
         fmt.Printf("Post is saved to Index: %s\n", p.Message)
-//
+
         ctx := context.Background()
         // you must update project name here
         bt_client, err := bigtable.NewClient(ctx, PROJECT_ID, BT_INSTANCE)
@@ -76,23 +74,21 @@ func handlerPost(w http.ResponseWriter, r *http.Request) {
                 return
         }
 
-         tbl := bt_client.Open("post")
-      mut := bigtable.NewMutation()
-      t := bigtable.Now()
+        tbl := bt_client.Open("post")
+        mut := bigtable.NewMutation()
+        t := bigtable.Now()
 
-      mut.Set("post", "user", t, []byte(p.User))
-      mut.Set("post", "message", t, []byte(p.Message))
-      mut.Set("location", "lat", t, []byte(strconv.FormatFloat(p.Location.Lat, 'f', -1, 64)))
-      mut.Set("location", "lon", t, []byte(strconv.FormatFloat(p.Location.Lon, 'f', -1, 64)))
+        mut.Set("post", "user", t, []byte(p.User))
+        mut.Set("post", "message", t, []byte(p.Message))
+        mut.Set("location", "lat", t, []byte(strconv.FormatFloat(p.Location.Lat, 'f', -1, 64)))
+        mut.Set("location", "lon", t, []byte(strconv.FormatFloat(p.Location.Lon, 'f', -1, 64)))
 
-      err = tbl.Apply(ctx, id, mut)
-      if err != nil {
+        err = tbl.Apply(ctx, id, mut)
+        if err != nil {
              panic(err)
              return
-      }
-      fmt.Printf("Post is saved to BigTable: %s\n", p.Message)
-
-
+        }
+        fmt.Printf("Post is saved to BigTable: %s\n", p.Message)
 }
 
 
@@ -161,40 +157,40 @@ func handlerSearch(w http.ResponseWriter, r *http.Request) {
 
 
 func main() {
-// Create a client
-client, err := elastic.NewClient(elastic.SetURL(ES_URL), elastic.SetSniff(false))
-if err != nil {
-panic(err)
-return
-}
+        // Create a client
+        client, err := elastic.NewClient(elastic.SetURL(ES_URL), elastic.SetSniff(false) )
+        if err != nil {
+        panic(err)
+        return
+        }
 
-// Use the IndexExists service to check if a specified index exists.
-exists, err := client.IndexExists(INDEX).Do()
-if err != nil {
-panic(err)
-}
-if !exists {
-// Create a new index.
-mapping := `{
-                    "mappings":{
-                           "post":{
-                                  "properties":{
-                                         "location":{
-                                                "type":"geo_point"
-                                         }
-                                  }
-                           }
-                    }
-             }
-             `
-_, err := client.CreateIndex(INDEX).Body(mapping).Do()
-if err != nil {
-// Handle error
-panic(err)
-}
-}
-fmt.Println("started-service")
-http.HandleFunc("/post", handlerPost)
-http.HandleFunc("/search", handlerSearch)
-log.Fatal(http.ListenAndServe(":8080", nil))
+        // Use the IndexExists service to check if a specified index exists.
+        exists, err := client.IndexExists(INDEX).Do()
+        if err != nil {
+        panic(err)
+        }
+        if !exists {
+        // Create a new index.
+        mapping := `{
+                            "mappings":{
+                                   "post":{
+                                          "properties":{
+                                                 "location":{
+                                                        "type":"geo_point"
+                                                 }
+                                          }
+                                   }
+                            }
+                     }
+                     `
+        _, err := client.CreateIndex(INDEX).Body(mapping).Do()
+        if err != nil {
+        // Handle error
+        panic(err)
+        }
+        }
+        fmt.Println("started-service")
+        http.HandleFunc("/post", handlerPost)
+        http.HandleFunc("/search", handlerSearch)
+        log.Fatal(http.ListenAndServe(":8080", nil))
 }
